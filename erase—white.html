@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remove Person - WebAR</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
+</head>
+<body>
+    <video id="video" autoplay playsinline style="display:none;"></video>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+            return new Promise(resolve => {
+                video.onloadedmetadata = () => resolve();
+            });
+        }
+
+        async function loadModel() {
+            const segmentation = new SelfieSegmentation({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}` });
+            segmentation.setOptions({ modelSelection: 1 });
+            await segmentation.initialize();
+            return segmentation;
+        }
+
+        async function start() {
+            await setupCamera();
+            const segmentation = await loadModel();
+
+            async function renderFrame() {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                const results = await segmentation.send({ image: video });
+
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const pixels = imageData.data;
+                const mask = results.segmentationMask.data;
+
+                for (let i = 0; i < mask.length; i++) {
+                    if (mask[i] > 0.5) { // 0.5 以上是人体
+                        pixels[i * 4 + 3] = 0; // 透明（A 通道设为 0）
+                    }
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+                requestAnimationFrame(renderFrame);
+            }
+            renderFrame();
+        }
+
+        start();
+    </script>
+</body>
+</html>
